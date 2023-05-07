@@ -87,13 +87,14 @@ const extraceMessage = (xmlString: string): Promise<WecomMessage> => {
 
 @Injectable()
 export class WecomService {
-    private readonly logger = new Logger(WecomService.name);
+    private readonly logger = new Logger(WecomService.name)
     private readonly token = config.wecomToken // 企业微信管理后台的 token
     private readonly encodingAESKey = config.wecomEncodingAesKey // 企业微信管理后台的 EncodingAESKey
     private readonly corpId = config.wecomCorpId // 企业微信管理后台的 corpId
     private readonly agentId = config.wecomAgentId
     private readonly agentSecret = config.wecomAgentSecret
     private lastTokenTime = 0
+    private accessToken: string
 
     constructor() {
         if (this.encodingAESKey.length !== 43) {
@@ -169,15 +170,14 @@ export class WecomService {
 
     async getAccessToken() {
         const nowInSecond = Math.ceil(Date.now() / 1000)
-        let accessToken: string
         // Check if token is outdated
         if (nowInSecond > this.lastTokenTime) {
             const res = await wecomCgi.get(`gettoken?corpid=${this.corpId}&corpsecret=${this.agentSecret}`)
-            this.logger.debug('getAccessToken', res)
-            accessToken = res.data.access_token
+            this.logger.debug(`getAccessToken result:${res.status}-${JSON.stringify(res.data)}`)
+            this.accessToken = res.data.access_token
             this.lastTokenTime = nowInSecond + 7000
         }
-        return accessToken
+        return this.accessToken
     }
 
     async sendText(toUser: string, message: string) {
@@ -191,8 +191,12 @@ export class WecomService {
                 msgtype: 'text',
                 agentid: this.agentId,
                 text: {
-                    content: message.substring(offset, offset + maxLength)
-                }
+                    content: message.substring(offset, offset + maxLength),
+                },
+                safe: 0,
+                enable_id_trans: 0,
+                enable_duplicate_check: 0,
+                duplicate_check_interval: 1800,
             })
             offset += maxLength
         }
@@ -201,8 +205,9 @@ export class WecomService {
 
     async send(data: any) {
         const accessToken = await this.getAccessToken()
+        this.logger.debug(`send wx: ${JSON.stringify(data)}`)
         const res = await wecomCgi.post(`message/send?access_token=${accessToken}`, data)
-        this.logger.debug('send', data, res)
+        this.logger.debug(`send wx result:${res.status}-${JSON.stringify(res.data)}`)
         return res
     }
 }
