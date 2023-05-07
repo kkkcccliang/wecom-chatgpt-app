@@ -20,23 +20,35 @@ async function chatgpt(username: string, message: string): Promise<string> {
         role: ChatCompletionRequestMessageRoleEnum.User,
         content: message,
     })
-    const response = await openai.createChatCompletion({
-        model: config.openaiModel,
-        messages: messages,
-        temperature: config.openaiTemperature,
-    })
+    let response: any
+    try {
+        response = await openai.createChatCompletion({
+            model: config.openaiModel,
+            messages: messages,
+            temperature: config.openaiTemperature,
+        })
+    } catch (e) {
+        if (e?.response?.statusText) {
+            console.error('openai error:' + e.response.statusText)
+            if (e.response.statusText === 'Too Many Requests') {
+                // TODO
+            }
+            return e.response.statusText
+        }
+        console.error(e)
+        return 'Openai api error'
+    }
     let assistantMessage = ''
     try {
         if (response.status === 200) {
             assistantMessage = response.data.choices[0].message?.content.replace(/^\n+|\n+$/g, '') as string
+            // 请求成功后加入对话上下文
+            chatCache.addUserMessage(username, message)
+            chatCache.addAssistantMessage(username, assistantMessage)
         } else {
             const err = `Something went wrong, status: ${response.status}, ${response.statusText}`
             console.error(err)
-            throw new Error(err)
         }
-        // 请求成功后加入对话上下文
-        chatCache.addUserMessage(username, message)
-        chatCache.addAssistantMessage(username, assistantMessage)
     } catch (e: any) {
         if (e.request) {
             assistantMessage = '请求出错'
