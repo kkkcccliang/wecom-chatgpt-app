@@ -15,6 +15,7 @@ export class WecomController {
 
     @Get()
     async handleGet(@Query() query: any) {
+        this.logger.debug('handleGet', query)
         const { msg_signature, timestamp, nonce, echostr } = query
         if (!(msg_signature && timestamp && nonce && echostr)) {
             this.logger.error('handleGet invalid request', msg_signature, timestamp, nonce, echostr)
@@ -29,10 +30,12 @@ export class WecomController {
 
     @Post()
     async handlePost(@Query() query: any, @Body() body: any, @Res() res: any) {
+        this.logger.debug('handlePost', query, body)
         const { msg_signature, timestamp, nonce } = query
         if (!(msg_signature && timestamp && nonce)) {
             this.logger.error('handlePost invalid request', msg_signature, timestamp, nonce)
-            return 'Invalid request'
+            res.send({ status: 500, message: 'Invalid request' })
+            return
         }
         try {
             const wecomMessage = await this.wecomService.decryptMsg(body, msg_signature, timestamp, nonce)
@@ -42,10 +45,10 @@ export class WecomController {
             const reply = await chatgpt(user, content)
             this.logger.debug('GPT reply', reply)
             await this.wecomService.sendText(user, reply)
-            res.send('OK')
+            res.send({ status: 200, message: 'OK' })
         } catch (e) {
             this.logger.error('handlePost', e.message)
-            return e.message
+            res.send({ status: 500, message: e.message })
         }
     }
 }
