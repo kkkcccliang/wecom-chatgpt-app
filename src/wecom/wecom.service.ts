@@ -185,38 +185,43 @@ export class WecomService {
                     '\t--设置当前会话的 prompt',
                     '/image <PROMPT>',
                     '\t--根据 <PROMPT> 生成图片',
-                ].join('')
+                ].join('\n')
             )
         }
         if (content === '/clear') {
             chatCache.clearHistory(username)
             return this.sendText(username, '会话已清除')
         }
-        if (content.startsWith('/img ')) {
-            const imagePrompt = content.substring(5)
-            const url = await dalle(username, imagePrompt)
-            this.logger.debug(`${content} ${url}`)
-            const fileBox = FileBox.fromUrl(url)
-            const accessToken = await this.getAccessToken()
-            const res = await wecomCgi.post(
-                `media/upload?access_token=${accessToken}&type=image`,
-                {
-                    media: {
-                        value: fileBox.toStream(),
-                        options: {
-                            filename: `${username}-${Date.now()}.png`,
-                            contentType: 'image/png',
+        if (content.startsWith('/image ')) {
+            const imagePrompt = content.substring(7)
+            try {
+                const url = await dalle(username, imagePrompt)
+                this.logger.debug(`${content} ${url}`)
+                const fileBox = FileBox.fromUrl(url)
+                const accessToken = await this.getAccessToken()
+                const res = await wecomCgi.post(
+                    `media/upload?access_token=${accessToken}&type=image`,
+                    {
+                        media: {
+                            value: await fileBox.toStream(),
+                            options: {
+                                filename: `${username}-${Date.now()}.png`,
+                                contentType: 'image/png',
+                            },
                         },
                     },
-                },
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                    },
-                }
-            )
-            this.logger.debug('wx image upload' + res.data)
-            return this.sendImage(username, res.data.media_id)
+                    {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                        },
+                    }
+                )
+                this.logger.debug('wx image upload' + res.data)
+                return this.sendImage(username, res.data.media_id)
+            } catch (e) {
+                this.logger.error('generate image error ' + e)
+                return this.sendText(username, '生成图片失败\n' + e.message)
+            }
         }
         if (content.startsWith('/prompt ')) {
             chatCache.setPrompt(username, content.substring(8, content.length))
@@ -264,7 +269,7 @@ export class WecomService {
         return this.send({
             touser: toUser,
             msgtype: 'image',
-            agentid: 1,
+            agentid: this.agentId,
             image: {
                 media_id: mediaId,
             },
