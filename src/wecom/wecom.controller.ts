@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Res, Body, Param, Logger } from '@nestjs/common'
+import { Controller, Get, Post, Res, Body, Query, Logger } from '@nestjs/common'
 import { WecomService } from './wecom.service'
 import { WX_CODE } from './constant'
 import { chatgpt } from '../openai/openai'
@@ -14,17 +14,13 @@ export class WecomController {
     constructor(private readonly wecomService: WecomService) {}
 
     @Get()
-    async handleGet(
-        @Param('msg_signature') sig: string,
-        @Param('timestamp') timestamp: string,
-        @Param('nonce') nonce: string,
-        @Param('echostr') echostr: string,
-    ) {
-        if (!(sig && timestamp && nonce && echostr)) {
-            this.logger.error('handleGet invalid request', sig, timestamp, nonce, echostr)
+    async handleGet(@Query() query: any) {
+        const { msg_signature, timestamp, nonce, echostr } = query
+        if (!(msg_signature && timestamp && nonce && echostr)) {
+            this.logger.error('handleGet invalid request', msg_signature, timestamp, nonce, echostr)
             return 'Invalid request'
         }
-        const { code, message } = this.wecomService.verifyUrl(sig, timestamp, nonce, echostr)
+        const { code, message } = this.wecomService.verifyUrl(msg_signature, timestamp, nonce, echostr)
         if (code !== WX_CODE.OK) {
             this.logger.error('Verify url fail', code)
         }
@@ -32,19 +28,14 @@ export class WecomController {
     }
 
     @Post()
-    async handlePost(
-        @Param('msg_signature') sig: string,
-        @Param('timestamp') timestamp: string,
-        @Param('nonce') nonce: string,
-        @Body() body: any,
-        @Res() res: any
-    ) {
-        if (!(sig && timestamp && nonce)) {
-            this.logger.error('handlePost invalid request', sig, timestamp, nonce)
+    async handlePost(@Query() query: any, @Body() body: any, @Res() res: any) {
+        const { msg_signature, timestamp, nonce } = query
+        if (!(msg_signature && timestamp && nonce)) {
+            this.logger.error('handlePost invalid request', msg_signature, timestamp, nonce)
             return 'Invalid request'
         }
         try {
-            const wecomMessage = await this.wecomService.decryptMsg(body, sig, timestamp, nonce)
+            const wecomMessage = await this.wecomService.decryptMsg(body, msg_signature, timestamp, nonce)
             const user = wecomMessage.fromUsername
             const content = wecomMessage.content
             this.logger.debug('User', user, 'send', content)
