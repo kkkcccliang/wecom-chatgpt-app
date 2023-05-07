@@ -1,0 +1,9 @@
+version: '3'
+services:
+  wecom-chatgpt-app:
+    image: wecom-chatgpt-app
+    build: .
+    volumes:
+      - ./:/app
+    env_file:
+      - .env
