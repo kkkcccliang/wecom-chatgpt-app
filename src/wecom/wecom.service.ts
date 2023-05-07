@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { getSignature, encrypt, decrypt } from '@wecom/crypto'
 import { parseString } from 'xml2js'
+import { FileBox } from 'file-box'
 import axios, { AxiosResponse } from 'axios'
 import { WX_CODE } from './constant'
 import { config } from '../config'
+import { chatgpt, dalle } from '../openai/openai'
+import chatCache from '../openai/cache'
 
 const wecomCgi = axios.create({
     baseURL: 'https://qyapi.weixin.qq.com/cgi-bin/',
@@ -168,6 +171,64 @@ export class WecomService {
         return await extraceMessage(message)
     }
 
+    async messageHandler(username: string, content: string): Promise<any> {
+        if (content === '/help') {
+            return this.sendText(
+                username,
+                [
+                    '==========',
+                    '/help',
+                    '\t--显示帮助信息',
+                    '/clear',
+                    '\t--清除 ChatGPT 的对话',
+                    '/prompt <PROMPT>',
+                    '\t--设置当前会话的 prompt',
+                    '/image <PROMPT>',
+                    '\t--根据 <PROMPT> 生成图片',
+                ].join('')
+            )
+        }
+        if (content === '/clear') {
+            chatCache.clearHistory(username)
+            return this.sendText(username, '会话已清除')
+        }
+        if (content.startsWith('/img ')) {
+            const imagePrompt = content.substring(5)
+            const url = await dalle(username, imagePrompt)
+            this.logger.debug(`${content} ${url}`)
+            const fileBox = FileBox.fromUrl(url)
+            const accessToken = await this.getAccessToken()
+            const res = await wecomCgi.post(
+                `media/upload?access_token=${accessToken}&type=image`,
+                {
+                    media: {
+                        value: fileBox.toStream(),
+                        options: {
+                            filename: `${username}-${Date.now()}.png`,
+                            contentType: 'image/png',
+                        },
+                    },
+                },
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }
+            )
+            this.logger.debug('wx image upload' + res.data)
+            return this.sendImage(username, res.data.media_id)
+        }
+        if (content.startsWith('/prompt ')) {
+            chatCache.setPrompt(username, content.substring(8, content.length))
+            return this.sendText(username, 'Prompt 已设置')
+        }
+
+        this.logger.debug(`User ${username} send ${content}`)
+        const reply = await chatgpt(username, content)
+        this.logger.debug(`GPT reply ${reply}`)
+        return this.sendText(username, reply)
+    }
+
     async getAccessToken() {
         const nowInSecond = Math.ceil(Date.now() / 1000)
         // Check if token is outdated
@@ -193,14 +254,21 @@ export class WecomService {
                 text: {
                     content: message.substring(offset, offset + maxLength),
                 },
-                safe: 0,
-                enable_id_trans: 0,
-                enable_duplicate_check: 0,
-                duplicate_check_interval: 1800,
             })
             offset += maxLength
         }
         return res
+    }
+
+    async sendImage(toUser: string, mediaId: string) {
+        return this.send({
+            touser: toUser,
+            msgtype: 'image',
+            agentid: 1,
+            image: {
+                media_id: mediaId,
+            },
+        })
     }
 
     async send(data: any) {

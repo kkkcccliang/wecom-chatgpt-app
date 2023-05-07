@@ -1,4 +1,4 @@
-import { Configuration, CreateImageRequestResponseFormatEnum, CreateImageRequestSizeEnum, OpenAIApi } from 'openai'
+import { Configuration, ChatCompletionRequestMessageRoleEnum, CreateImageRequestResponseFormatEnum, CreateImageRequestSizeEnum, OpenAIApi } from 'openai'
 import fs from 'fs'
 import chatCache from './cache'
 import { config } from '../config'
@@ -15,7 +15,11 @@ const openai = new OpenAIApi(configuration)
  * @param message
  */
 async function chatgpt(username: string, message: string): Promise<string> {
-    const messages = chatCache.addUserMessage(username, message)
+    const messages = chatCache.getChatMessages(username)
+    messages.push({
+        role: ChatCompletionRequestMessageRoleEnum.User,
+        content: message,
+    })
     const response = await openai.createChatCompletion({
         model: config.openaiModel,
         messages: messages,
@@ -30,6 +34,9 @@ async function chatgpt(username: string, message: string): Promise<string> {
             console.error(err)
             throw new Error(err)
         }
+        // 请求成功后加入对话上下文
+        chatCache.addUserMessage(username, message)
+        chatCache.addAssistantMessage(username, assistantMessage)
     } catch (e: any) {
         if (e.request) {
             assistantMessage = '请求出错'
@@ -44,12 +51,12 @@ async function chatgpt(username: string, message: string): Promise<string> {
  * @param username
  * @param prompt
  */
-async function dalle(username: string, prompt: string) {
+async function dalle(username: string, prompt: string): Promise<string> {
     const response = await openai
         .createImage({
             prompt: prompt,
             n: 1,
-            size: CreateImageRequestSizeEnum._256x256,
+            size: CreateImageRequestSizeEnum._512x512,
             response_format: CreateImageRequestResponseFormatEnum.Url,
             user: username,
         })

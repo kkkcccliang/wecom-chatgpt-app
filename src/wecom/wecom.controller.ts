@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Res, Body, Query, Logger } from '@nestjs/common'
 import { WecomService } from './wecom.service'
 import { WX_CODE } from './constant'
-import { chatgpt } from '../openai/openai'
 
 @Controller('wecom')
 export class WecomController {
@@ -30,21 +29,17 @@ export class WecomController {
         const { msg_signature, timestamp, nonce } = query
         if (!(msg_signature && timestamp && nonce)) {
             this.logger.error(`handleGet invalid request: ${msg_signature}, ${timestamp}, ${nonce}`)
-            res.send({ status: 500, message: 'Invalid request' })
+            res.status(500).send('Invalid request')
             return
         }
         try {
             const wecomMessage = await this.wecomService.decryptMsg(body, msg_signature, timestamp, nonce)
-            const user = wecomMessage.fromUsername
-            const content = wecomMessage.content
-            this.logger.debug(`User ${user} send ${content}`)
-            const reply = await chatgpt(user, content)
-            this.logger.debug(`GPT reply ${reply}`)
-            await this.wecomService.sendText(user, reply)
-            res.send({ status: 200, message: 'OK' })
+            // 先回复微信，必须回复成功并且空字串。否则会重发消息
+            res.send('')
+            this.wecomService.messageHandler(wecomMessage.fromUsername, wecomMessage.content)
         } catch (e) {
             this.logger.error('handlePost' +  e.message)
-            res.send({ status: 500, message: e.message })
+            res.status(500).send(e.message)
         }
     }
 }
