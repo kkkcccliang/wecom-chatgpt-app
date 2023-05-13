@@ -172,6 +172,9 @@ export class WecomService {
     }
 
     async messageHandler(username: string, content: string): Promise<any> {
+        if (!content) {
+            return
+        }
         if (content === '/help') {
             return this.sendText(
                 username,

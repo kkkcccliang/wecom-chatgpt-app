@@ -28,12 +28,13 @@ export class WecomController {
         this.logger.debug(`handlePost ${query} ${body}`)
         const { msg_signature, timestamp, nonce } = query
         if (!(msg_signature && timestamp && nonce)) {
-            this.logger.error(`handleGet invalid request: ${msg_signature}, ${timestamp}, ${nonce}`)
+            this.logger.error(`handlePost invalid request: ${msg_signature}, ${timestamp}, ${nonce}`)
             res.status(500).send('Invalid request')
             return
         }
         try {
             const wecomMessage = await this.wecomService.decryptMsg(body, msg_signature, timestamp, nonce)
+            this.logger.debug(`handlePost wecomMessage:`, JSON.stringify(wecomMessage))
             // 先回复微信，必须回复成功并且空字串。否则会重发消息
             res.send('')
             this.wecomService.messageHandler(wecomMessage.fromUsername, wecomMessage.content)
